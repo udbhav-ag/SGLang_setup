@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# =============================================================================
+# Local environment setup for /home/sdp/aditya
+# Source this file: source /home/sdp/aditya/.bashrc_local
+# =============================================================================
+
+# --- Colors ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+# --- Welcome Banner ---
+echo -e "${CYAN}"
+echo "  ╔═══════════════════════════════════════════════════════════╗"
+echo "  ║                                                           ║"
+echo -e "  ║   ${WHITE}Welcome back, Aditya!${CYAN}                                   ║"
+echo "  ║                                                           ║"
+echo -e "  ║   ${PURPLE}▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▀▀▄${CYAN}                ║"
+echo -e "  ║   ${PURPLE}█    ▀  █      █    █  █   ▄▀  █▄▄▄▄   ▀▄${CYAN}               ║"
+echo -e "  ║   ${PURPLE} ▀▄▄▄▄  █      █    █  █▄▄▀▀   █       ▄▀${CYAN}               ║"
+echo -e "  ║   ${PURPLE}      █ █▄▄▄▄▄ █▄▄▄▄█  █   █   █▄▄▄▄▄▄▀${CYAN}                 ║"
+echo "  ║                                                           ║"
+echo "  ╚═══════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+# --- SSH Agent Setup ---
+# Use a persistent socket file to avoid spawning multiple agents
+SSH_ENV="$HOME/.ssh/agent.env"
+
+start_ssh_agent() {
+    ssh-agent -s | sed 's/^echo/#echo/' > "$SSH_ENV"
+    chmod 600 "$SSH_ENV"
+    source "$SSH_ENV" > /dev/null
+    ssh-add /home/sdp/aditya/id_git_adi 2>/dev/null
+}
+
+# Check if agent is already running and socket is valid
+if [ -f "$SSH_ENV" ]; then
+    source "$SSH_ENV" > /dev/null
+    # Check if the agent process is still running
+    if ! kill -0 "$SSH_AGENT_PID" 2>/dev/null; then
+        start_ssh_agent
+    fi
+else
+    start_ssh_agent
+fi
+
+# --- Git Configuration ---
+echo "Configuring git settings for all repositories in /home/sdp/aditya/..."
+find /home/sdp/aditya -name ".git" -type d 2>/dev/null | while read gitdir; do
+    repo_path=$(dirname "$gitdir")
+    (cd "$repo_path" && \
+     git config --local user.name "bangaradi-score" && \
+     git config --local user.email "aditya.bangar@scorelabsai.com") 2>/dev/null
+done
+echo "Git configuration complete."
+
+# --- PATH ---
+export PATH="/home/sdp/aditya/.local/bin:$PATH"
+
+# --- Conda (local miniconda3) ---
+source /home/sdp/aditya/.local/miniconda3/bin/activate
+
+# --- HuggingFace Token ---
+export HF_TOKEN="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"
+
+# --- GitHub CLI Config ---
+export GH_CONFIG_DIR=/home/sdp/aditya/.gh_config
+
+# --- NeoVim Config ---
+export XDG_CONFIG_HOME=/home/sdp/aditya/.local/config
+export XDG_DATA_HOME=/home/sdp/aditya/.local/share
+
+# --- Bash Completion ---
+if [ -d "$HOME/.local/share/bash-completion" ]; then
+    export BASH_COMPLETION_USER_DIR="$HOME/.local/share/bash-completion"
+fi
+
+# --- Man Pages ---
+export MANPATH="$HOME/.local/share/man:$MANPATH"

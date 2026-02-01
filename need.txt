@@ -1,0 +1,18 @@
+1. Miniconda download 
+1.1 Conda setup in my directory 
+source "$HOME/Udbhav/miniconda3/etc/profile.d/conda.sh"
+conda config --set auto_activate_base false >/dev/null 2>&1
+
+
+2. Local directory setup
+3. Nvidia drivers
+4. apt update
+5. github ssh key setup
+6. hf login
+7. uv
+8. upgrade cmake
+9. nvcc
+10. btop
+11. install numa
+12. build essentials
+13. github login
