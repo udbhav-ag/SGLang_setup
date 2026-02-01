@@ -35,7 +35,7 @@ source "$HOME/Udbhav/miniconda3/etc/profile.d/conda.sh"
 
 4. Server Start
 ```bash
-python3 -m sglang.launch_server -config config.yaml
+ python3 -m sglang.launch_server --config config.yaml > sglang.log 2>&1 
 ```
 
 3. Testing Command 
@@ -54,7 +54,7 @@ Using HiCacheFiles to test for persistence of KV cache across runs,
     2. mem-fraction-static: 0.2 // to force the cache out of the GPU memory
     3. hicache-ratio: 1
 ```bash
-export SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR="/workspace/Udbhav/source_compile/hicache_persistence"
+export SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR="$HOME/Udbhav/source_compile/hicache_persistence"
 ```
 
 4. 

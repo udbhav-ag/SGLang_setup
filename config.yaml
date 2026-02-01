@@ -6,7 +6,7 @@ model: meta-llama/Llama-3.2-3B
 tokenizer-mode: auto
 trust-remote-code: true
 chat-template: llama-2
-# context-length: # defaults to the model's config.json value
+context-length: 35000 # defaults to the model's config.json value
 
 
 # HTTP Server
@@ -19,6 +19,7 @@ dtype: auto
 # quantization-param-path: 
 kv-cache-dtype: auto
 
+allow-auto-truncate: true
 # Memory and Scheduling
 mem-fraction-static: 0.2  # Fraction of GPU memory to preallocate at startup for its static memory pool, primarily the KV cache  after loading model weights (0.0 - 1.0)
 # max-running-requests: 16  # Maximum number of concurrent requests the server can handle
@@ -58,7 +59,7 @@ enable-cache-report: true
 
 # HiCache
 enable-hierarchical-cache: true
-hicache-ratio: 1  # Ratio of size of host KV cache memory pool to the size of the device pool
+hicache-ratio: 2  # Ratio of size of host KV cache memory pool to the size of the device pool
 hicache-write-policy: write_through  # Options: write-back, write-through, write-through-selective
 # How data moves between GPU - CPU.
 # 1. write_through (default) Every KV written to GPU is also immediately copied to CPU.
