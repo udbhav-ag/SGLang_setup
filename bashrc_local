@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════════════════════════╗"
 echo "  ║                                                           ║"
-echo -e "  ║   ${WHITE}Welcome back, Aditya!${CYAN}                                   ║"
+echo -e "  ║   ${WHITE}Welcome back, Udbhav!${CYAN}                 ║"
 echo "  ║                                                           ║"
 echo -e "  ║   ${PURPLE}▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▄  ▄▀▀▀▀▀▀▄${CYAN}                ║"
 echo -e "  ║   ${PURPLE}█    ▀  █      █    █  █   ▄▀  █▄▄▄▄   ▀▄${CYAN}               ║"
@@ -31,41 +31,69 @@ echo -e "${NC}"
 
 # --- SSH Agent Setup ---
 # Use a persistent socket file to avoid spawning multiple agents
+# --- Your New SSH Agent Setup ---
 SSH_ENV="$HOME/.ssh/agent.env"
 
-start_ssh_agent() {
+function start_ssh_agent {
+    echo "Initializing new SSH agent..."
     ssh-agent -s | sed 's/^echo/#echo/' > "$SSH_ENV"
     chmod 600 "$SSH_ENV"
     source "$SSH_ENV" > /dev/null
-    ssh-add /home/sdp/aditya/id_git_adi 2>/dev/null
+    # This looks for YOUR default key
+    ssh-add ~/.ssh/id_rsa 2>/dev/null || ssh-add ~/.ssh/id_ed25519 2>/dev/null
 }
 
-# Check if agent is already running and socket is valid
+# Source the env if it exists, otherwise start a new one
 if [ -f "$SSH_ENV" ]; then
     source "$SSH_ENV" > /dev/null
-    # Check if the agent process is still running
-    if ! kill -0 "$SSH_AGENT_PID" 2>/dev/null; then
-        start_ssh_agent
-    fi
+    # Check if the agent is actually still alive
+    ps -ef | grep "$SSH_AGENT_PID" | grep ssh-agent > /dev/null || start_ssh_agent
 else
     start_ssh_agent
 fi
 
-# --- Git Configuration ---
-echo "Configuring git settings for all repositories in /home/sdp/aditya/..."
-find /home/sdp/aditya -name ".git" -type d 2>/dev/null | while read gitdir; do
-    repo_path=$(dirname "$gitdir")
-    (cd "$repo_path" && \
-     git config --local user.name "bangaradi-score" && \
-     git config --local user.email "aditya.bangar@scorelabsai.com") 2>/dev/null
-done
-echo "Git configuration complete."
+# --- YOUR Git Configuration ---
+TARGET_DIR="$HOME/Udbhav"
+MY_NAME="Udbhav Agarwal"
+MY_EMAIL="udbhav.agarwal@scorelabsai.com"
 
-# --- PATH ---
-export PATH="/home/sdp/aditya/.local/bin:$PATH"
+echo "Configuring git settings for all repositories in $TARGET_DIR..."
+
+find "$TARGET_DIR" -name ".git" -type d 2>/dev/null | while read gitdir; do
+    repo_path=$(dirname "$gitdir")
+    echo "Updating $repo_path"
+    (cd "$repo_path" && \
+     git config --local user.name "$MY_NAME" && \
+     git config --local user.email "$MY_EMAIL") 2>/dev/null
+done
+
+echo "Done!"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+
+# 1. & 1.1 Miniconda Setup
+mkdir -p ~/Udbhav && cd ~/Udbhav
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+bash miniconda.sh -b -u -p ~/Udbhav/miniconda3
+rm miniconda.sh
+
+# Initialize
+source "$HOME/Udbhav/miniconda3/etc/profile.d/conda.sh"
+conda config --set auto_activate_base false >/dev/null 2>&1
+conda init bash
+
+# 7. & 8. Modern Build Tools (uv & cmake)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.cargo/env
+uv pip install --system "cmake>=3.26"
+
+# CUDA paths (Critical for building sgl-kernel)
+export PATH="/usr/local/cuda/bin:$PATH"
+export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
 
 # --- Conda (local miniconda3) ---
-source /home/sdp/aditya/.local/miniconda3/bin/activate
+source "$HOME/Udbhav/miniconda3/etc/profile.d/conda.sh"
 
 # --- HuggingFace Token ---
 export HF_TOKEN="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"
@@ -73,9 +101,6 @@ export HF_TOKEN="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"
 # --- GitHub CLI Config ---
 export GH_CONFIG_DIR=/home/sdp/aditya/.gh_config
 
-# --- NeoVim Config ---
-export XDG_CONFIG_HOME=/home/sdp/aditya/.local/config
-export XDG_DATA_HOME=/home/sdp/aditya/.local/share
 
 # --- Bash Completion ---
 if [ -d "$HOME/.local/share/bash-completion" ]; then
@@ -84,3 +109,7 @@ fi
 
 # --- Man Pages ---
 export MANPATH="$HOME/.local/share/man:$MANPATH"
+
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y build-essential libnuma-dev btop
+sudo apt install -y nvidia-driver-535 nvidia-cuda-toolkit

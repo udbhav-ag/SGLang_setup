@@ -46,6 +46,8 @@ log-level-http: debug
 log-requests: true
 log-requests-level: 3
 # log-requests-format: text
+enable-metrics: true
+
 
 
 # Metrics Export
@@ -59,7 +61,7 @@ enable-cache-report: true
 
 # HiCache
 enable-hierarchical-cache: true
-hicache-ratio: 2  # Ratio of size of host KV cache memory pool to the size of the device pool
+hicache-ratio: 4  # Ratio of size of host KV cache memory pool to the size of the device pool
 hicache-write-policy: write_through  # Options: write-back, write-through, write-through-selective
 # How data moves between GPU - CPU.
 # 1. write_through (default) Every KV written to GPU is also immediately copied to CPU.
