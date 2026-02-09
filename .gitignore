@@ -3,3 +3,4 @@ metrics/
 hicache_persistence/
 __pycache__
 sglang.log
+hicache_mc
