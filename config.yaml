@@ -70,9 +70,9 @@ hicache-write-policy: write_through  # Options: write-back, write-through, write
 
 hicache-io-backend: kernel # how data is physically moved between GPU and CPU for nvidia-gpu
 hicache-mem-layout:  layer_first # how CPU KV memory is organized.
-hicache-storage-backend: file # READ THE DOCS FOR THIS
+hicache-storage-backend: mooncake # READ THE DOCS FOR THIS
 hicache-storage-prefetch-policy: best_effort # When KV is on storage backend, and a request needs it, should SGLang best_effort, wait_complete, timeout
-# hicache-storage-backend-extra-config: {} # extra config for storage backend, refer to docs for details
+hicache-storage-backend-extra-config: '{"hicache_storage_pass_prefix_keys": true}' # extra config for storage backend, refer to docs for details
 
 # Mooncake Specific Configs
 

@@ -31,6 +31,7 @@ conda install -y -c conda-forge cmake
 
 ```bash
 source "$HOME/Udbhav/miniconda3/etc/profile.d/conda.sh"
+conda activate src_com
 ```
 
 4. Server Start
@@ -61,4 +62,59 @@ export SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR="$HOME/Udbhav/source_compile/hica
 ```bash
 Clear the JIT compilation cacheexport SGLANG_DEBUG=1
 rm -rf /root/.cache/tvm-ffi/
+```
+
+## Tracing the Disk Reload issue?
+
+1. `hicache_storage.py` -> Creates the Hicache controller and loads the cache
+2. `hiradix_cache.py` -> 
+    ```bash
+    func -> prefetch_from_storage is responsible but not running due to conditions not met
+    HELLOOOO WORLD FROM PREFETCH 
+Prefetching tokens: 7
+True
+256
+Cannot prefetch due to conditions not met
+
+    6. This file runs and calls the functions successfully but
+
+`cache_controller.py`
+    ```bash
+    [2026-02-05 07:24:35] Revoking prefetch for request dac9f11344814e66b041fa58ce4449fc due to insufficient hits (0).
+[2026-02-05 07:24:35] Prefetch dac9f11344814e66b041fa58ce4449fc completed with 0 tokens
+    ```
+
+7. Flow 
+When a request arrives after restart:
+
+1. `prefetch_from_storage()` is called
+2. `HiCacheController.prefetch()` queues the operation `cache_controller.py:761-777`
+3. `prefetch_thread_func()` calls `_storage_hit_query()` which returns 0 hits `cache_controller.py:910-959`
+  1. `_storage_hit_query`   -> Get no prefix_key # THIS IS THE ISSUE
+4. Since 0 < prefetch_threshold (256), prefetch is revoked `cache_controller.py:936-943`
+5. System generates new cache and tries to write it, triggering "already exists" messages `hicache_storage.py:249-251`
+
+
+
+## Fix
+Fixed this to accumulate the Prefix keys
+```bash
+prefix_keys = list(operation.prefix_keys) if operation.prefix_keys is not None else []
+```
+
+Now 
+```bash
+Aligned prefetch length: 25153
+Sending prefetch operation d11d27318479422ca27c3f194df1eb4a with 25153 tokens.
+Sending prefetch keys: ['a7d933a1375c236bbd43f144ddca8e85e17bc7f4eeacbb6dcbbccc1ea5ed3eba']
+Sending Operation to prefetch buffer <sglang.srt.managers.cache_controller.PrefetchOperation object at 0x76d43ed18550>
+Entered _storage_hit_query
+Recieved Operation <sglang.srt.managers.cache_controller.PrefetchOperation object at 0x76d43ed18550>
+Recieved Tokens to Fetch 25153
+Prefix Keys Original ['a7d933a1375c236bbd43f144ddca8e85e17bc7f4eeacbb6dcbbccc1ea5ed3eba']
+File : /home/ubuntu/Udbhav/v0.5.7/sglang/python/sglang/srt/managers/cache_controller.py
+Prefix Keys Fetched ['a7d933a1375c236bbd43f144ddca8e85e17bc7f4eeacbb6dcbbccc1ea5ed3eba']
+
+[2026-02-05 09:19:07] Prefetch d11d27318479422ca27c3f194df1eb4a completed with 0 tokens
+[2026-02-05 09:19:08] Prefetching 25153 pages for request d11d27318479422ca27c3f194df1eb4a.
 ```
