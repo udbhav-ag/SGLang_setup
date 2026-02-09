@@ -20,3 +20,10 @@ sudo make install # optional, make it ready to be used by vLLM/SGLang
 ```bash
 pip install mooncake-transfer-engine
 ```
+
+
+4. Start Mooncake
+```bash
+ mooncake_master --rpc_port=50051 --config_path=mooncake_config.yaml --enable_http_metadata_server=1 -v=1 > mc.log 2>&1 
+
+```

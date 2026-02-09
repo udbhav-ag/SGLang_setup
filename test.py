@@ -9,9 +9,9 @@ def load_prompt(file_path):
         return f.read().strip()
 
 prompt1 = load_prompt("prompts/1.txt")
-prompt1 = prompt1[:120000]
+prompt1 = prompt1[:90000]
 prompt2 = load_prompt("prompts/2.txt")
-prompt2 = prompt2[:134000]
+prompt2 = prompt2[:94000]
 
 # print(f"Prompt 1 tokens: {count_tokens(prompt1)}")
 # print(f"Prompt 2 tokens: {count_tokens(prompt2)}")

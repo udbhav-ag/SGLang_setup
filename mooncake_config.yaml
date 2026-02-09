@@ -7,4 +7,5 @@ local_buffer_size: "4gb"
 protocol: "tcp"
 device_name: ""
 transfer_timeout: 30
+persistence_root: "/home/ubuntu/Udbhav/source_compile/hicache_mc"
 save_chunk_meta: true

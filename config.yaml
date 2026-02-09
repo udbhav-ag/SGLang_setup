@@ -80,6 +80,7 @@ hicache-storage-backend-extra-config: '{"master_server_address": "127.0.0.1:5005
   "protocol": "tcp",
   "device_name": "",
   "transfer_timeout": 30,
+  "persistence_root": "/home/ubuntu/Udbhav/source_compile/hicache_mc",
   "save_chunk_meta": true
 }'
 # extra config for storage backend, refer to docs for details
