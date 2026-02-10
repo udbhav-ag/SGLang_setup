@@ -1,0 +1,12 @@
+{
+    "local_hostname": "0.0.0.0",
+    "metadata_server": "http://18.232.108.218:8080/metadata",
+    "master_server_address": "18.232.108.218:50051",
+    "protocol": "tcp",
+    "device_name": "",
+    "global_segment_size": "8gb",
+    "local_buffer_size": 0, 
+    "root_fs_dir": "/home/ubuntu/Udbhav/mc/cache",
+    "persistence_root": "/home/ubuntu/Udbhav/mc/cache",
+    "eviction_high_watermark_ratio": 0
+}
