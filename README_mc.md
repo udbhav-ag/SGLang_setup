@@ -117,3 +117,15 @@ cmake .. \
       -DWITH_STORE=ON
 ```
 then run : `make -j` and then finall `sudo make install`
+
+
+## NFS setup
+
+```bash
+# Install NFS client
+sudo apt install nfs-common -y
+sudo mkdir -p /mnt/mooncake_data
+# Replace 10.0.0.10 with your NFS server IP
+sudo mount 172.31.42.129:<PATH TO SHARED STORAGE> /mnt/mooncake_data
+
+```

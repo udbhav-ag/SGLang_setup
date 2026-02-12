@@ -19,7 +19,7 @@ dtype: auto
 # quantization-param-path: 
 kv-cache-dtype: auto
 
-allow-auto-truncate: false
+allow-auto-truncate: true
 # Memory and Scheduling
 mem-fraction-static: 0.2  # Fraction of GPU memory to preallocate at startup for its static memory pool, primarily the KV cache  after loading model weights (0.0 - 1.0)
 # max-running-requests: 16  # Maximum number of concurrent requests the server can handle

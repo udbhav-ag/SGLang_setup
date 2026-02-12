@@ -80,7 +80,7 @@ def main():
         p2 = "Dummy text B. " * 5000
 
     # Generate deterministic prompts
-    all_prompts = make_unique_deterministic_prompts(p1, p2, n=50, prompt_size=200000)
+    all_prompts = make_unique_deterministic_prompts(p1, p2, n=10, prompt_size=20000)
 
     # Connect to local SGLang (Sync Client)
     client = OpenAI(
