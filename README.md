@@ -125,7 +125,8 @@ Prefix Keys Fetched ['a7d933a1375c236bbd43f144ddca8e85e17bc7f4eeacbb6dcbbccc1ea5
 ## Docker Setup
 
 1. Using the `docker-compose.yml`
-2. ```bash
+2. 
+```bash
 # Install the nvidia-cuda-toolkit and other GPU packages and check the docker runtime to see if it is configured to use GPU
 docker compose up -d
 docker exec it udbhav_env bash
@@ -135,3 +136,19 @@ docker compose build --no-cache
 docker compose up -d
 ```
 
+## Disaggregation 
+
+1. `disaggregation-mode` : prefill, decode
+2. `disaggregation-transfer-backend`: The disaggregation transfer backend moves KV cache data between prefill and decode instances in Prefill-Decode (PD) disaggregation. After a prefill instance processes a prompt, the backend transfers the generated KV cache to a decode instance for token generation. Supported backends include mooncake, nixl, ascend, and fake
+
+> So basically Sglang doesn't support disaggregation natively -> it uses third party plugins to support the transfer backend
+
+### Why fake works in decode but not prefill
+1. In prefill mode, a bootstrap server must start to coordinate with decode instances . The fake backend does not provide a BOOTSTRAP_SERVER implementation; its class mapping only includes KVARGS, SENDER, and RECEIVER . Therefore get_kv_class(..., BOOTSTRAP_SERVER) returns None, causing the TypeError.
+2. In decode mode, no bootstrap server is needed. The decode side only needs a receiver to fetch KV data from the prefill side. The fake backend provides a FakeKVReceiver . Additionally, decode can auto-enable fake mode when disaggregation_decode_enable_fake_auto is set or the request specifies a fake bootstrap host, directly using the FakeKVReceiver
+
+
+### Imp Info
+1. The bootstrap server is a lightweight HTTP service that runs only on the prefill side in Prefill-Decode disaggregation. It lets decode workers discover and connect to prefill workers by storing and serving metadata like IP/port and parallelism info. It uses a separate port (--disaggregation-bootstrap-port, default 8998) to isolate coordination traffic from data transfer and other services
+
+![Image](assets/image.png)

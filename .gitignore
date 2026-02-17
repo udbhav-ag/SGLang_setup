@@ -5,3 +5,4 @@ __pycache__
 sglang.log
 hicache_mc
 mc.log
+*.log
