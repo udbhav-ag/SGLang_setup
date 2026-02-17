@@ -1,0 +1,34 @@
+services:
+  ubuntu:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: udbhav_env
+
+    stdin_open: true
+    tty: true
+
+    cpus: "8.0"
+    mem_limit: 16g
+    cpuset: "0-7"
+    
+    gpus: all
+
+    ports:
+      - "30000:30000"
+      - "8000:8000"
+      - "8080:8080"
+      - "9000:9000"
+
+    volumes:
+      - /home/interns/Udbhav:/Udbhav
+    working_dir: /Udbhav
+    command: /bin/bash
+    networks:
+      - udbhav_network
+
+networks:
+  udbhav_network:
+    driver: bridge
+
+

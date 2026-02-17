@@ -118,3 +118,20 @@ Prefix Keys Fetched ['a7d933a1375c236bbd43f144ddca8e85e17bc7f4eeacbb6dcbbccc1ea5
 [2026-02-05 09:19:07] Prefetch d11d27318479422ca27c3f194df1eb4a completed with 0 tokens
 [2026-02-05 09:19:08] Prefetching 25153 pages for request d11d27318479422ca27c3f194df1eb4a.
 ```
+
+
+
+
+## Docker Setup
+
+1. Using the `docker-compose.yml`
+2. ```bash
+# Install the nvidia-cuda-toolkit and other GPU packages and check the docker runtime to see if it is configured to use GPU
+docker compose up -d
+docker exec it udbhav_env bash
+
+docker compose down --volumes --remove-orphans
+docker compose build --no-cache
+docker compose up -d
+```
+
