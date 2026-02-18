@@ -8,8 +8,8 @@ services:
     stdin_open: true
     tty: true
 
-    cpus: "8.0"
-    mem_limit: 16g
+    cpus: "16.0"
+    mem_limit: 32g
     cpuset: "0-7"
     
     gpus: all

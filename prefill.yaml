@@ -1,0 +1,12 @@
+model: meta-llama/Llama-3.2-3B
+# tokenizer-path:
+tokenizer-mode: auto
+trust-remote-code: true
+chat-template: llama-2
+device : cpu  # Options: cuda, cpu, xpu,hpu, npu
+run-name: prefill-18-feb
+batch-size: 2
+input-len: 512
+output-len: 512
+prompt-filename: /Udbhav/prompts/1.txt
+correctness-test: true
