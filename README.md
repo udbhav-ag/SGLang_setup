@@ -134,6 +134,11 @@ docker exec it udbhav_env bash
 docker compose down --volumes --remove-orphans
 docker compose build --no-cache
 docker compose up -d
+
+
+export PATH=/Udbhav/miniconda3/bin:$PATH
+python3 decode.py --config decode.yaml > decode.log 2>&1 
+python3 prefill.py  --config prefill.yaml > prefill.log 2>&1 
 ```
 
 ## Disaggregation 
@@ -152,3 +157,27 @@ docker compose up -d
 1. The bootstrap server is a lightweight HTTP service that runs only on the prefill side in Prefill-Decode disaggregation. It lets decode workers discover and connect to prefill workers by storing and serving metadata like IP/port and parallelism info. It uses a separate port (--disaggregation-bootstrap-port, default 8998) to isolate coordination traffic from data transfer and other services
 
 ![Image](assets/image.png)
+
+
+## IMPORTANT PD DISSAGREGATION
+
+1. The load_cpu_copy has torch.cuda.synchronize and this stops the execution on CPU only machine 
+```bash
+    def load_cpu_copy(self, kv_cache_cpu, indices):
+        # torch.cuda.synchronize()
+        chunk_size = self.cpu_offloading_chunk_size
+        for layer_id in range(self.layer_num):
+            for i in range(0, len(indices), chunk_size):
+                chunk_indices = indices[i : i + chunk_size]
+                k_cpu, v_cpu = (
+                    kv_cache_cpu[layer_id][i // chunk_size][0],
+                    kv_cache_cpu[layer_id][i // chunk_size][1],
+                )
+                assert k_cpu.shape[0] == v_cpu.shape[0] == len(chunk_indices)
+                k_chunk = k_cpu.to(self.k_buffer[0].device, non_blocking=True)
+                v_chunk = v_cpu.to(self.v_buffer[0].device, non_blocking=True)
+                self.k_buffer[layer_id][chunk_indices] = k_chunk
+                self.v_buffer[layer_id][chunk_indices] = v_chunk
+        # torch.cuda.synchronize()
+```
+File location -> `/home/interns/Udbhav/sglang/python/sglang/srt/mem_cache/memory_pool.py`

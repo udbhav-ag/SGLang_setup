@@ -11,6 +11,62 @@ import time
 from types import SimpleNamespace
 from typing import Tuple
 
+
+def _extract_cli_flag_value(argv, flag):
+    for i, arg in enumerate(argv):
+        if arg == flag and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith(flag + "="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def _read_device_from_config(config_path):
+    try:
+        import yaml
+
+        with open(config_path, "r") as f:
+            cfg = yaml.safe_load(f) or {}
+        if isinstance(cfg, dict):
+            device = cfg.get("device")
+            if isinstance(device, str):
+                return device.strip().lower()
+    except Exception:
+        pass
+
+    # Fallback parser for simple YAML key/value files.
+    try:
+        with open(config_path, "r") as f:
+            for line in f:
+                line = line.split("#", 1)[0].strip()
+                if not line or ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                if key.strip() == "device":
+                    return value.strip().strip("'\"").lower()
+    except Exception:
+        pass
+
+    return None
+
+
+def _bootstrap_cpu_engine_from_argv():
+    # Must run before importing torch/sglang so backend dispatch picks CPU paths.
+    argv = sys.argv[1:]
+    device = _extract_cli_flag_value(argv, "--device")
+
+    if device is None:
+        config_path = _extract_cli_flag_value(argv, "--config")
+        if config_path:
+            device = _read_device_from_config(config_path)
+
+    if isinstance(device, str) and device.strip().lower() == "cpu":
+        os.environ.setdefault("SGLANG_USE_CPU_ENGINE", "1")
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
+
+_bootstrap_cpu_engine_from_argv()
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -146,6 +202,7 @@ class BenchArgs:
 def load_model(server_args, port_args, gpu_id, tp_rank):
     
     suppress_other_loggers()
+    print(f"Loading model on TP rank {tp_rank} with GPU ID {gpu_id}...")
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
     moe_ep_rank = tp_rank // (server_args.tp_size // server_args.ep_size)
 
@@ -163,6 +220,7 @@ def load_model(server_args, port_args, gpu_id, tp_rank):
         nccl_port=port_args.nccl_port,
         server_args=server_args,
     )
+    print(f"Model loaded on TP rank {tp_rank}.")
     runtime_device_msg = f"runtime_device={model_runner.device}, gpu_id={gpu_id}, tp_rank={tp_rank}"
     if model_runner.device.startswith("cuda") and torch.cuda.is_available():
         runtime_device_msg += f", cuda_current_device={torch.cuda.current_device()}"
@@ -367,7 +425,7 @@ def correctness_test(
             req.fill_ids = list(input_ids[i])
             req.logprob_start_len = -1
 
-        kv_load_dir = os.environ.get("SGLANG_KV_CACHE_DIR", "/Udbhav/cache")
+        kv_load_dir = os.environ.get("SGLANG_KV_CACHE_DIR", "/Udbhav/cache_gpu")
         restored_tokens = load_persisted_kv_for_reqs(reqs, model_runner, kv_load_dir)
         rank_print(f"Restored cached tokens per request: {restored_tokens}")
 
