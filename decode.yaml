@@ -8,7 +8,7 @@ attention-backend: torch_native
 kv-cache-dtype: bfloat16
 
 # CPU OOM guardrails: cap preallocated KV pool instead of auto-sizing from host RAM.
-mem-fraction-static: 0.6
+# mem-fraction-static: 0.6
 max-total-tokens: 4096
 max-running-requests: 8
 max-prefill-tokens: 2048
@@ -16,7 +16,7 @@ chunked-prefill-size: -1
 
 run-name: decode-18-feb
 batch-size: 2
-# input-len: 512
-# output-len: 512
-prompt-filename: /Udbhav/prompts/1.txt
+input-len: 1024
+output-len: 128
+prompt-filename: /Udbhav/SGLang_setup/prompts/1.txt
 correctness-test: true

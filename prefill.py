@@ -103,8 +103,14 @@ from sglang.srt.utils.hf_transformers_utils import get_tokenizer
 from utils import *
 
 
-def _read_prompts_from_file(prompt_file, rank_print):
-    """Read custom prompts from the file specified by `--prompt-filename`."""
+def _read_prompts_from_file(
+    prompt_file,
+    rank_print,
+    tokenizer=None,
+    seq_len=None,
+    batch_size=None,
+):
+    """Read and optionally synthesize prompts from file with fixed token length."""
     if not prompt_file:
         return []
     if not os.path.exists(prompt_file):
@@ -112,8 +118,52 @@ def _read_prompts_from_file(prompt_file, rank_print):
             f"Custom prompt file {prompt_file} not found. Using default inputs..."
         )
         return []
+
     with open(prompt_file, "r") as pf:
-        return pf.readlines()
+        file_text = pf.read()
+
+    if not file_text.strip():
+        rank_print(f"Custom prompt file {prompt_file} is empty. Using default inputs...")
+        return []
+
+    if tokenizer is None or seq_len is None or batch_size is None:
+        return [line for line in file_text.splitlines() if line.strip()]
+
+    seq_len = int(seq_len)
+    batch_size = int(batch_size)
+    if seq_len <= 0 or batch_size <= 0:
+        rank_print(
+            f"Invalid seq_len={seq_len} or batch_size={batch_size}. Using default inputs..."
+        )
+        return []
+
+    source_token_ids = tokenizer.encode(file_text)
+    if len(source_token_ids) == 0:
+        rank_print(
+            f"Prompt file {prompt_file} produced no tokens. Using default inputs..."
+        )
+        return []
+
+    if len(source_token_ids) < seq_len:
+        repeat_count = (seq_len + len(source_token_ids) - 1) // len(source_token_ids)
+        source_token_ids = source_token_ids * repeat_count
+
+    prompts = []
+    total_tokens = len(source_token_ids)
+    for i in range(batch_size):
+        start = (i * seq_len) % total_tokens
+        end = start + seq_len
+        if end <= total_tokens:
+            chunk_ids = source_token_ids[start:end]
+        else:
+            wrap = end - total_tokens
+            chunk_ids = source_token_ids[start:] + source_token_ids[:wrap]
+        prompts.append(tokenizer.decode(chunk_ids))
+
+    rank_print(
+        f"Generated {len(prompts)} prompts from {prompt_file} with seq_len={seq_len} tokens."
+    )
+    return prompts
 
 
 @dataclasses.dataclass
@@ -122,11 +172,11 @@ class BenchArgs:
     batch_size: Tuple[int] = (1,)
     input_len: Tuple[int] = (1024,)
     output_len: Tuple[int] = (16,)
-    prompt_filename: str = "prompts/1.txt"
+    prompt_filename: str = "SGLang_setup/prompts/1.txt"
     result_filename: str = "result.jsonl"
     correctness_test: bool = False
     # This is only used for correctness test
-    cut_len: int = 4
+    cut_len: int = 0
     log_decode_step: int = 0
     profile: bool = False
     profile_record_shapes: bool = False
@@ -200,11 +250,11 @@ class BenchArgs:
 
 
 def load_model(server_args, port_args, gpu_id, tp_rank):
-    
     suppress_other_loggers()
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
     moe_ep_rank = tp_rank // (server_args.tp_size // server_args.ep_size)
 
+    model_load_start = time.perf_counter()
     model_config = ModelConfig.from_server_args(server_args)
     model_runner = ModelRunner(
         model_config=model_config,
@@ -219,16 +269,31 @@ def load_model(server_args, port_args, gpu_id, tp_rank):
         nccl_port=port_args.nccl_port,
         server_args=server_args,
     )
+    if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    model_load_s = time.perf_counter() - model_load_start
+
     runtime_device_msg = f"runtime_device={model_runner.device}, gpu_id={gpu_id}, tp_rank={tp_rank}"
     if model_runner.device.startswith("cuda") and torch.cuda.is_available():
         runtime_device_msg += f", cuda_current_device={torch.cuda.current_device()}"
     rank_print(runtime_device_msg)
     rank_print(f"max_total_num_tokens={model_runner.max_total_num_tokens}")
+
+    tokenizer_load_start = time.perf_counter()
     tokenizer = get_tokenizer(
         server_args.tokenizer_path,
         tokenizer_mode=server_args.tokenizer_mode,
         trust_remote_code=server_args.trust_remote_code,
     )
+    tokenizer_load_s = time.perf_counter() - tokenizer_load_start
+    total_load_s = model_load_s + tokenizer_load_s
+    rank_print(f"Prefill model load time: {model_load_s:.4f}s")
+    rank_print(f"Prefill tokenizer load time: {tokenizer_load_s:.4f}s")
+    rank_print(f"Prefill total load time: {total_load_s:.4f}s")
+    rank_print(f"PREFILL_MODEL_LOAD_S={model_load_s:.6f}")
+    rank_print(f"PREFILL_TOKENIZER_LOAD_S={tokenizer_load_s:.6f}")
+    rank_print(f"PREFILL_TOTAL_LOAD_S={total_load_s:.6f}")
+
     if server_args.tp_size > 1:
         dist.barrier()
     return model_runner, tokenizer
@@ -380,12 +445,29 @@ def extend_and_maybe_persist_kv(
     Returns:
         next_token_ids, next_token_logits, batch, saved_files
     """
+    if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    prefill_forward_start = time.perf_counter()
     next_token_ids, next_token_logits, batch = extend(reqs, model_runner)
+    if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    prefill_forward_s = time.perf_counter() - prefill_forward_start
+    rank_print(f"Prefill forward pass time: {prefill_forward_s:.4f}s")
+    rank_print(f"PREFILL_FORWARD_S={prefill_forward_s:.6f}")
 
     saved_files = []
+    kv_save_s = 0.0
     if kv_save_dir:
+        if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+            torch.cuda.synchronize()
+        kv_save_start = time.perf_counter()
         saved_files = save_batch_kv_cache_to_disk(reqs, model_runner, kv_save_dir)
+        if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+            torch.cuda.synchronize()
+        kv_save_s = time.perf_counter() - kv_save_start
         rank_print(f"Saved KV cache for {len(saved_files)} request(s) to {kv_save_dir}")
+        rank_print(f"KV cache save to disk time: {kv_save_s:.4f}s")
+        rank_print(f"PREFILL_KV_SAVE_S={kv_save_s:.6f}")
 
     return next_token_ids, next_token_logits, batch, saved_files
 
@@ -425,15 +507,31 @@ def correctness_test(
         model_runner, tokenizer = load_model(server_args, port_args, gpu_id, tp_rank)
 
         # Prepare inputs
-        custom_prompts = _read_prompts_from_file(bench_args.prompt_filename, rank_print)
+        custom_prompts = _read_prompts_from_file(
+            bench_args.prompt_filename,
+            rank_print,
+            tokenizer=tokenizer,
+            seq_len=bench_args.input_len[0],
+            batch_size=bench_args.batch_size[0],
+        )
         input_ids, reqs = prepare_inputs_for_correctness_test(
             bench_args, tokenizer, custom_prompts
         )
-        rank_print(f"\n{input_ids=}\n")
+        # rank_print(f"\n{input_ids=}\n")
 
         if bench_args.cut_len > 0:
             # Prefill
+            if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.synchronize()
+            first_half_prefill_start = time.perf_counter()
             next_token_ids, next_token_logits, batch = extend(reqs, model_runner)
+            if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.synchronize()
+            first_half_prefill_s = time.perf_counter() - first_half_prefill_start
+            rank_print(
+                f"Prefill forward pass (first half) time: {first_half_prefill_s:.4f}s"
+            )
+            rank_print(f"PREFILL_FORWARD_FIRST_HALF_S={first_half_prefill_s:.6f}")
             rank_print(f"prefill logits (first half): {next_token_logits} \n")
 
         # Prepare extend inputs
@@ -465,9 +563,8 @@ def correctness_test(
     
     
 def main(server_args, bench_args):
-    server_args.cuda_graph_max_bs = max(bench_args.batch_size)
-
     _set_envs_and_config(server_args)
+    server_args.cuda_graph_max_bs = max(bench_args.batch_size)
 
     if server_args.model_path:
         if bench_args.correctness_test:

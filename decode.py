@@ -103,8 +103,14 @@ from sglang.srt.utils.hf_transformers_utils import get_tokenizer
 from utils import *
 
 
-def _read_prompts_from_file(prompt_file, rank_print):
-    """Read custom prompts from the file specified by `--prompt-filename`."""
+def _read_prompts_from_file(
+    prompt_file,
+    rank_print,
+    tokenizer=None,
+    seq_len=None,
+    batch_size=None,
+):
+    """Read and optionally synthesize prompts from file with fixed token length."""
     if not prompt_file:
         return []
     if not os.path.exists(prompt_file):
@@ -112,8 +118,52 @@ def _read_prompts_from_file(prompt_file, rank_print):
             f"Custom prompt file {prompt_file} not found. Using default inputs..."
         )
         return []
+
     with open(prompt_file, "r") as pf:
-        return pf.readlines()
+        file_text = pf.read()
+
+    if not file_text.strip():
+        rank_print(f"Custom prompt file {prompt_file} is empty. Using default inputs...")
+        return []
+
+    if tokenizer is None or seq_len is None or batch_size is None:
+        return [line for line in file_text.splitlines() if line.strip()]
+
+    seq_len = int(seq_len)
+    batch_size = int(batch_size)
+    if seq_len <= 0 or batch_size <= 0:
+        rank_print(
+            f"Invalid seq_len={seq_len} or batch_size={batch_size}. Using default inputs..."
+        )
+        return []
+
+    source_token_ids = tokenizer.encode(file_text)
+    if len(source_token_ids) == 0:
+        rank_print(
+            f"Prompt file {prompt_file} produced no tokens. Using default inputs..."
+        )
+        return []
+
+    if len(source_token_ids) < seq_len:
+        repeat_count = (seq_len + len(source_token_ids) - 1) // len(source_token_ids)
+        source_token_ids = source_token_ids * repeat_count
+
+    prompts = []
+    total_tokens = len(source_token_ids)
+    for i in range(batch_size):
+        start = (i * seq_len) % total_tokens
+        end = start + seq_len
+        if end <= total_tokens:
+            chunk_ids = source_token_ids[start:end]
+        else:
+            wrap = end - total_tokens
+            chunk_ids = source_token_ids[start:] + source_token_ids[:wrap]
+        prompts.append(tokenizer.decode(chunk_ids))
+
+    rank_print(
+        f"Generated {len(prompts)} prompts from {prompt_file} with seq_len={seq_len} tokens."
+    )
+    return prompts
 
 
 @dataclasses.dataclass
@@ -206,6 +256,7 @@ def load_model(server_args, port_args, gpu_id, tp_rank):
     rank_print = print if tp_rank == 0 else lambda *args, **kwargs: None
     moe_ep_rank = tp_rank // (server_args.tp_size // server_args.ep_size)
 
+    model_load_start = time.perf_counter()
     model_config = ModelConfig.from_server_args(server_args)
     model_runner = ModelRunner(
         model_config=model_config,
@@ -220,17 +271,31 @@ def load_model(server_args, port_args, gpu_id, tp_rank):
         nccl_port=port_args.nccl_port,
         server_args=server_args,
     )
+    if model_runner.device.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    model_load_s = time.perf_counter() - model_load_start
     print(f"Model loaded on TP rank {tp_rank}.")
     runtime_device_msg = f"runtime_device={model_runner.device}, gpu_id={gpu_id}, tp_rank={tp_rank}"
     if model_runner.device.startswith("cuda") and torch.cuda.is_available():
         runtime_device_msg += f", cuda_current_device={torch.cuda.current_device()}"
     rank_print(runtime_device_msg)
     rank_print(f"max_total_num_tokens={model_runner.max_total_num_tokens}")
+
+    tokenizer_load_start = time.perf_counter()
     tokenizer = get_tokenizer(
         server_args.tokenizer_path,
         tokenizer_mode=server_args.tokenizer_mode,
         trust_remote_code=server_args.trust_remote_code,
     )
+    tokenizer_load_s = time.perf_counter() - tokenizer_load_start
+    total_load_s = model_load_s + tokenizer_load_s
+    rank_print(f"Decode model load time: {model_load_s:.4f}s")
+    rank_print(f"Decode tokenizer load time: {tokenizer_load_s:.4f}s")
+    rank_print(f"Decode total load time: {total_load_s:.4f}s")
+    rank_print(f"DECODE_MODEL_LOAD_S={model_load_s:.6f}")
+    rank_print(f"DECODE_TOKENIZER_LOAD_S={tokenizer_load_s:.6f}")
+    rank_print(f"DECODE_TOTAL_LOAD_S={total_load_s:.6f}")
+
     if server_args.tp_size > 1:
         dist.barrier()
     return model_runner, tokenizer
@@ -413,11 +478,17 @@ def correctness_test(
 
         model_runner, tokenizer = load_model(server_args, port_args, gpu_id, tp_rank)
 
-        custom_prompts = _read_prompts_from_file(bench_args.prompt_filename, rank_print)
+        custom_prompts = _read_prompts_from_file(
+            bench_args.prompt_filename,
+            rank_print,
+            tokenizer=tokenizer,
+            seq_len=bench_args.input_len[0],
+            batch_size=bench_args.batch_size[0],
+        )
         input_ids, reqs = prepare_inputs_for_correctness_test(
             bench_args, tokenizer, custom_prompts
         )
-        rank_print(f"\n{input_ids=}\n")
+        # rank_print(f"\n{input_ids=}\n")
 
         # For decode-only flow, requests should carry full prompt tokens.
         for i, req in enumerate(reqs):
@@ -425,6 +496,7 @@ def correctness_test(
             req.fill_ids = list(input_ids[i])
             req.logprob_start_len = -1
 
+        decode_ttft_start = time.perf_counter()
         kv_load_dir = os.environ.get("SGLANG_KV_CACHE_DIR", "/Udbhav/cache_gpu")
         restored_tokens = load_persisted_kv_for_reqs(reqs, model_runner, kv_load_dir)
         rank_print(f"Restored cached tokens per request: {restored_tokens}")
@@ -438,7 +510,13 @@ def correctness_test(
                 req.prefix_indices = req.prefix_indices[:-1]
             req.set_extend_input_len(len(req.fill_ids) - len(req.prefix_indices))
 
+        first_token_start = time.perf_counter()
         next_token_ids, next_token_logits, batch = extend(reqs, model_runner)
+        first_token_compute_s = time.perf_counter() - first_token_start
+        decode_ttft_s = time.perf_counter() - decode_ttft_start
+        rank_print(f"Decode TTFT (including KV load): {decode_ttft_s:.4f}s")
+        rank_print(f"Decode first-token compute time: {first_token_compute_s:.4f}s")
+        rank_print(f"DECODE_TTFT_S={decode_ttft_s:.6f}")
         rank_print(f"decode warm-start logits: {next_token_logits}\n")
 
         next_token_ids_list = next_token_ids.tolist()
@@ -451,14 +529,14 @@ def correctness_test(
 
         for i in range(len(reqs)):
             rank_print(f"========== Prompt {i} ==========")
-            rank_print(tokenizer.decode(output_ids[i]), "\n")
+            tokenizer.decode(output_ids[i])
+            print(f"Done Prompt {i}")
     finally:
         destroy_distributed_environment()
 
 def main(server_args, bench_args):
-    server_args.cuda_graph_max_bs = max(bench_args.batch_size)
-
     _set_envs_and_config(server_args)
+    server_args.cuda_graph_max_bs = max(bench_args.batch_size)
 
     if server_args.model_path:
         if bench_args.correctness_test:

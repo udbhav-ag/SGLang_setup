@@ -7,7 +7,9 @@ chat-template: llama-2
 device : cuda  # Options: cuda, cpu, xpu,hpu, npu
 run-name: prefill-18-feb
 batch-size: 2
-input-len: 512
-output-len: 512
-prompt-filename: /Udbhav/prompts/1.txt
+input-len: 1024
+output-len: 128
+prompt-filename: /Udbhav/SGLang_setup/prompts/1.txt
 correctness-test: true
+# mem-fraction-static: 0.2
+disable-cuda-graph: true
