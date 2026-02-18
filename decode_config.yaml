@@ -11,7 +11,7 @@ context-length: 64000 # defaults to the model's config.json value
 
 # HTTP Server
 host: 0.0.0.0
-port: 30000
+port: 30001
 
 # Quantization and dtye
 dtype: auto
@@ -19,14 +19,16 @@ dtype: auto
 # quantization-param-path: 
 page-size: 128
 kv-cache-dtype: auto
-disaggregation-mode: prefill
+disaggregation-mode: decode
 disaggregation-transfer-backend: mooncake
+# disaggregation-decode-enable-offload-kvcache: true
 allow-auto-truncate: false
 # Memory and Scheduling
 mem-fraction-static: 0.45  # Fraction of GPU memory to preallocate at startup for its static memory pool, primarily the KV cache  after loading model weights (0.0 - 1.0)
 # max-running-requests: 16  # Maximum number of concurrent requests the server can handle
 # max-queued-requests: 64  # Maximum number of requests that can be queued when all running request slots are full
-max-total-tokens: 64000  # the absolute maximum tokens that can be held in the KV cache memory pool across all concurrent requests combined. I
+max-total-tokens: 8192
+max-prefill-tokens: 2048   # the absolute maximum tokens that can be held in the KV cache memory pool across all concurrent requests combined. I
 chunked-prefill-size: -1 # Maximum number of tokens to process in a single chunk during the prefill phase. -1 means no chunking.
 schedule-policy: fcfs # Scheduling policy for handling requests. Options: fcfs (default), lpm, random, dfs-weights, lof, priority, routing-key
 enable-priority-scheduling: false # Enable priority-based scheduling for requests.
@@ -56,15 +58,15 @@ enable-cache-report: true
 export-metrics-to-file: true
 export-metrics-to-file-dir: ./metrics
 enable-cache-report: true
-attention-backend: triton
-sampling-backend: pytorch
+# attention-backend: torch_native
+# sampling-backend: pytorch
 
 
 # Kernel Backend 
 ## Need to review these
 
 # HiCache
-enable-hierarchical-cache: true
+# enable-hierarchical-cache: true
 hicache-ratio: 1  # Ratio of size of host KV cache memory pool to the size of the device pool
 hicache-write-policy: write_through  # Options: write-back, write-through, write-through-selective
 file-storage-path: /Udbhav/cache
