@@ -181,3 +181,37 @@ python3 prefill.py  --config prefill.yaml > prefill.log 2>&1
         # torch.cuda.synchronize()
 ```
 File location -> `/home/interns/Udbhav/sglang/python/sglang/srt/mem_cache/memory_pool.py`
+
+
+
+## Benchmarking
+```bash
+python3 prefill_gpu_decode_cpu.py 2>&1 | tee "$LOG" & grep -E "PREFILL_MODEL_LOAD_S=|PREFILL_TOKENIZER_LOAD_S=|PREFILL_TOTAL_LOAD_S=|PREFILL_FORWARD_FIRST_HALF_S=|PREFILL_FORWARD_S=|PREFILL_KV_SAVE_S=|DECODE_MODEL_LOAD_S=|DECODE_TOKENIZER_LOAD_S=|DECODE_TOTAL_LOAD_S=|DECODE_TTFT_S=|GPU prefill time:|KV load timing:" "$LOG" > "$OUT"
+```
+
+
+## KV Cache Maths
+
+```bash
+cell_size_per_token_bytes = num_kv_heads * (head_dim + v_head_dim) * num_layers * dtype_bytes
+(from model_runner_kv_cache_mixin.py (line 82))
+
+Then allocated KV memory is roughly:
+
+kv_bytes ~= (max_total_num_tokens + page_size) * cell_size_per_token_bytes
+(actual tensors are allocated as [size + page_size, ...] in memory_pool.py (line 764) and memory_pool.py (line 772)).
+
+In your sweep, max_total_num_tokens = bs * (input_len + 256).
+
+So:
+
+kv_bytes ~= (bs * (input_len + 256) + page_size) * num_kv_heads * (head_dim + v_head_dim) * num_layers * dtype_bytes
+
+For a typical Llama-style 1B config (approx num_layers=16, num_kv_heads=8, head_dim=v_head_dim=64, bf16=2 bytes):
+
+Per-token KV = 8*(64+64)*16*2 = 32,768 bytes (32 KB/token)
+1 GB holds about ~32K tokens
+Worst case in your grid (bs=32, input_len=32768):
+max_total_tokens=1,056,768 -> KV alone ~32.3 GB (plus other buffers/overheads)
+
+```
